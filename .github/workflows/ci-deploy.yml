@@ -1,0 +1,84 @@
+name: CI and Deploy
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    name: Build and validate repository
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate Python syntax
+        run: |
+          python -m compileall backend frontend
+
+      - name: Build backend Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: frontend/Dockerfile.backend
+          platforms: linux/amd64
+          push: false
+          tags: ghcr.io/${{ github.repository }}/ai-project-streamlit-backend:latest
+
+      - name: Build frontend Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: Dockerfile.frontend
+          platforms: linux/amd64
+          push: false
+          tags: ghcr.io/${{ github.repository }}/ai-project-streamlit-frontend:latest
+
+  publish:
+    name: Publish Docker images to GitHub Container Registry
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v5
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: frontend/Dockerfile.backend
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ github.repository }}/ai-project-streamlit-backend:latest
+
+      - name: Publish frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: Dockerfile.frontend
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ github.repository }}/ai-project-streamlit-frontend:latest

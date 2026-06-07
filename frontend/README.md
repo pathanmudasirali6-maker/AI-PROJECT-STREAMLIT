@@ -80,6 +80,13 @@ streamlit run app.py
 ### Build and run with Docker Compose
 
 ```powershell
+cd frontend
+docker compose up --build
+```
+
+Or run from the repository root:
+
+```powershell
 docker compose up --build
 ```
 

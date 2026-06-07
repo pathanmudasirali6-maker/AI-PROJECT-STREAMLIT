@@ -93,11 +93,36 @@ def ensure_backend_available(timeout_sec: int = 5, poll_interval: float = 1.0) -
     while time.time() - start < timeout_sec:
         if check_backend_health_once(backend_url):
             logger.info("Backend is healthy")
+            st.session_state.backend_status.update(
+                {
+                    "healthy": True,
+                    "checked_at": datetime.now().isoformat(),
+                    "url": backend_url,
+                }
+            )
             return True
         logger.info("Backend not ready, sleeping %.1fs", poll_interval)
         time.sleep(poll_interval)
     logger.warning("Backend remained unavailable after %s seconds", timeout_sec)
+    st.session_state.backend_status.update(
+        {
+            "healthy": False,
+            "checked_at": datetime.now().isoformat(),
+            "url": backend_url,
+        }
+    )
     return False
+
+
+def wake_backend(timeout_sec: int = 10, poll_interval: float = 1.0) -> bool:
+    st.session_state.backend_status.update(
+        {
+            "healthy": False,
+            "checked_at": datetime.now().isoformat(),
+            "url": get_backend_url(),
+        }
+    )
+    return ensure_backend_available(timeout_sec=timeout_sec, poll_interval=poll_interval)
 
 
 def make_api_request(
@@ -221,7 +246,7 @@ backend_unavailable_message = (
     "We're having trouble connecting to our services.\n"
     "Don't worry — this is usually temporary. Try the following:\n\n"
     "1. Check your internet connection\n"
-    "2. Click 'Retry connection' above\n\n"
+    "2. Click 'Wake Backend' above to bring the service back online\n\n"
     "If the problem persists, try:\n"
     "• Refreshing the page\n"
     "• Clearing your browser cache\n"
@@ -254,12 +279,18 @@ with st.sidebar:
 
     if not backend_health_ok:
         st.error(backend_unavailable_message)
-        if st.button("Retry connection"):
-            try:
-                st.rerun()
-            except Exception:
-                if hasattr(st, "experimental_rerun"):
-                    st.experimental_rerun()
+        button_pressed = st.button("Wake Backend")
+        if button_pressed:
+            with st.spinner("Waking backend service..."):
+                if wake_backend(timeout_sec=10, poll_interval=1.0):
+                    st.success("Backend is awake and ready.")
+                    try:
+                        st.rerun()
+                    except Exception:
+                        if hasattr(st, "experimental_rerun"):
+                            st.experimental_rerun()
+                else:
+                    st.error("Backend is still unavailable. Please try again or check your backend service.")
 
     st.markdown("---")
     st.write("Build your custom AI visual classifier with a clean training workflow.")
